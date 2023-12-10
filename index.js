@@ -1,36 +1,51 @@
-//create an API for the blockchain
-//get  the express module
-const express = require('express');
-//get  the body parser module
-const bodyParser  = require('body-parser');
-//get  the blockchain module
-const Blockchain  = require('../blockchain');
-//get the P2p server class
-const P2pServer = require('./p2p-server');
-//run  server on port 3001 
-const HTTP_PORT = process.env.HTTP_PORT || 3001;
+// module.exports  = Blockchain;
+const Block = require('./block');
 
-const app = express();
-const bc = new Blockchain();
-const p2pServer  = new P2pServer(bc);
+class Blockchain {
+    //create a chain
+  constructor() {
+    this.chain = [Block.genesis()];
+  }
+  //create a func to add blocks to the chain
+  addBlock(data) {
+    //generate a new block //get the last block on the chain
+    const block = Block.mineBlock(this.chain[this.chain.length-1], data);
+    //add the last block to the chain array
+    this.chain.push(block);
 
-//allow to use body-parser  with post  requests
-app.use(bodyParser.json());
-//make an instance of the app
-app.get('/blocks', (req, res) => {
-    res.json(bc.chain);
-});
+    return block;
+  }
+  //create func to check the chain is valid
+  isValidChain(chain) {
+    //check the incoming chain has the right genesis block the first  block of the chain
+    if(JSON.stringify(chain[0]) !== JSON.stringify(Block.genesis())) return false;
+    //run a validation for each  block after the genesis
+    for (let i=1; i<chain.length; i++) {
+      const block = chain[i]; //show current block
+      const lastBlock = chain[i-1]; //last block
+        //check if the block hash matches 
+      if (block.lastHash !== lastBlock.hash ||
+          block.hash !== Block.blockHash(block)) {
+        return false;
+      }
+    }
+    //run if  everything is ok
+    return true;
+  }
+  //create a func to replace the chain
+  replaceChain(newChain) {
+    //check the new chain is longer then the current one
+    if (newChain.length <= this.chain.length) {
+      console.log('Received chain is not longer than the current chain.');
+      return;
+    } else if (!this.isValidChain(newChain)) {
+      console.log('The received chain is not valid.');
+      return;
+    }
+    //if pass the if statements  means the chain is valid
+    console.log('Replacing blockchain with the new chain.');
+    this.chain = newChain;
+  }
+}
 
-app.post('/mine', (req, res)  =>  {
-    const block =  bc.addBlock(req.body.data);
-    console.log(`New block added: ${block.toString()}`);
-
-    //sync all chains 
-    p2pServer.syncChains();
-
-    res.redirect('/blocks');
-});
-
-app.listen(HTTP_PORT, ()  => console.log(`listening  on  port ${HTTP_PORT}`));
-//start the websocket server
-p2pServer.listen();
+module.exports = Blockchain;
